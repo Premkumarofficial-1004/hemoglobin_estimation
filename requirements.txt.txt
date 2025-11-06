@@ -1,0 +1,10 @@
+numpy
+pandas
+opencv-python
+scikit-learn
+matplotlib
+joblib
+tqdm
+tensorflow>=2.10
+streamlit
+scikit-image
