@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 from predict import predict_ml, predict_cnn
 
 # -------------------- Streamlit Page Config --------------------
@@ -30,9 +31,9 @@ def is_valid_image(image):
     return skin_ratio > 0.05
 
 # -------------------- Helper Function to Save Results --------------------
-def log_result(name, hb_value):
-    df = pd.DataFrame([[name, hb_value, datetime.datetime.now()]],
-                      columns=["Name", "Hb (g/dL)", "Timestamp"])
+def log_result(name, hb_value, confidence):
+    df = pd.DataFrame([[name, hb_value, confidence, datetime.datetime.now()]],
+                      columns=["Name", "Hb (g/dL)", "Confidence (%)", "Timestamp"])
     df.to_csv("patient_records.csv", mode='a', header=False, index=False)
 
 # -------------------- Main App Logic --------------------
@@ -58,9 +59,26 @@ if img_data:
         hb_cnn = predict_cnn("captured_phone.jpg")
         hb_final = (hb_ml + hb_cnn) / 2
 
-        st.success(f"Predicted Hemoglobin: **{hb_final:.2f} g/dL**")
+        # -------------------- Confidence Level Calculation --------------------
+        hb_diff = abs(hb_ml - hb_cnn)
+        confidence = max(0, 100 - (hb_diff * 8))  # Smaller difference = higher confidence
+        confidence = min(confidence, 100)
 
-        # Categorize result
+        # Display results
+        st.success(f"Predicted Hemoglobin: **{hb_final:.2f} g/dL**")
+        st.progress(int(confidence))
+        st.caption(f"Model Confidence: {confidence:.1f}%")
+
+        # -------------------- Comparison Bar Chart --------------------
+        fig, ax = plt.subplots()
+        ax.bar(["ML Model", "CNN Model"], [hb_ml, hb_cnn], color=["#2196F3", "#E91E63"])
+        ax.axhline(hb_final, color="green", linestyle="--", label="Average")
+        ax.set_ylabel("Hemoglobin (g/dL)")
+        ax.set_title("Model Prediction Comparison")
+        ax.legend()
+        st.pyplot(fig)
+
+        # -------------------- Categorize Result --------------------
         if hb_final < 11:
             st.error("⚠️ Low Hemoglobin (Possible Anemia)")
         elif hb_final > 17:
@@ -68,8 +86,8 @@ if img_data:
         else:
             st.info("✅ Normal Hemoglobin Level")
 
-        # Save patient name and record
+        # -------------------- Save patient name and record --------------------
         patient_name = st.text_input("Enter Patient Name:")
         if st.button("Save Result"):
-            log_result(patient_name, hb_final)
+            log_result(patient_name, hb_final, confidence)
             st.success("📝 Record saved successfully!")
