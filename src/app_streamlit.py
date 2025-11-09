@@ -12,25 +12,39 @@ st.set_page_config(page_title="Hemoglobin Estimation", layout="centered")
 st.title("🩸 Non-Invasive Hemoglobin Estimation")
 st.write("Use your **Android phone camera** to capture a fingernail or conjunctiva image for instant hemoglobin estimation.")
 
-# -------------------- Skin Validation Function --------------------
+# -------------------- Smart Image Validation --------------------
 def is_valid_image(image):
-    # Convert to HSV color space
+    """Check if the captured image likely contains a fingernail or conjunctiva region."""
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    # Define a wide skin-color range (for all skin tones)
+    # Broad skin color range to handle all skin tones
     lower_skin = np.array([0, 15, 60], dtype=np.uint8)
     upper_skin = np.array([35, 255, 255], dtype=np.uint8)
 
-    # Create mask and count skin-colored pixels
+    # Create mask for skin color
     mask = cv2.inRange(hsv, lower_skin, upper_skin)
-    skin_pixels = cv2.countNonZero(mask)
-    total_pixels = image.shape[0] * image.shape[1]
-    skin_ratio = skin_pixels / total_pixels
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Accept only if ≥ 5% of the image looks like skin
-    return skin_ratio > 0.05
+    h, w = image.shape[:2]
+    total_area = h * w
+    valid_regions = 0
 
-# -------------------- Helper Function to Save Results --------------------
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < (0.01 * total_area) or area > (0.25 * total_area):
+            continue  # Ignore very small or very large regions
+
+        x, y, cw, ch = cv2.boundingRect(c)
+        aspect = cw / ch if ch != 0 else 0
+
+        # Fingernails/conjunctiva are roughly rectangular and near center
+        if 0.5 < aspect < 2.5 and (w * 0.2 < x < w * 0.8) and (h * 0.2 < y < h * 0.8):
+            valid_regions += 1
+
+    # Accept only if a valid region exists
+    return valid_regions > 0
+
+# -------------------- Save Results Helper --------------------
 def log_result(name, hb_value, confidence):
     df = pd.DataFrame([[name, hb_value, confidence, datetime.datetime.now()]],
                       columns=["Name", "Hb (g/dL)", "Confidence (%)", "Timestamp"])
@@ -40,21 +54,21 @@ def log_result(name, hb_value, confidence):
 img_data = st.camera_input("📷 Capture Image Using Phone Camera")
 
 if img_data:
-    # Save image
+    # Save the captured image
     with open("captured_phone.jpg", "wb") as f:
         f.write(img_data.getbuffer())
 
-    # Read saved image using OpenCV
+    # Read image using OpenCV
     image = cv2.imread("captured_phone.jpg")
 
-    # ✅ Validate before prediction
+    # Validate before prediction
     if not is_valid_image(image):
         st.warning("⚠️ Please capture a clear fingernail or conjunctiva image.")
     else:
         st.image("captured_phone.jpg", caption="Captured Image", use_column_width=True)
         st.subheader("🔍 Prediction Results")
 
-        # Predict using both ML and CNN models
+        # Predict with both ML and CNN models
         hb_ml = predict_ml("captured_phone.jpg")
         hb_cnn = predict_cnn("captured_phone.jpg")
         hb_final = (hb_ml + hb_cnn) / 2
@@ -64,12 +78,12 @@ if img_data:
         confidence = max(0, 100 - (hb_diff * 8))  # Smaller difference = higher confidence
         confidence = min(confidence, 100)
 
-        # Display results
+        # Display predicted values
         st.success(f"Predicted Hemoglobin: **{hb_final:.2f} g/dL**")
         st.progress(int(confidence))
         st.caption(f"Model Confidence: {confidence:.1f}%")
 
-        # -------------------- Comparison Bar Chart --------------------
+        # -------------------- Bar Chart for Model Comparison --------------------
         fig, ax = plt.subplots()
         ax.bar(["ML Model", "CNN Model"], [hb_ml, hb_cnn], color=["#2196F3", "#E91E63"])
         ax.axhline(hb_final, color="green", linestyle="--", label="Average")
@@ -78,7 +92,7 @@ if img_data:
         ax.legend()
         st.pyplot(fig)
 
-        # -------------------- Categorize Result --------------------
+        # -------------------- Result Interpretation --------------------
         if hb_final < 11:
             st.error("⚠️ Low Hemoglobin (Possible Anemia)")
         elif hb_final > 17:
@@ -86,7 +100,7 @@ if img_data:
         else:
             st.info("✅ Normal Hemoglobin Level")
 
-        # -------------------- Save patient name and record --------------------
+        # -------------------- Save Record --------------------
         patient_name = st.text_input("Enter Patient Name:")
         if st.button("Save Result"):
             log_result(patient_name, hb_final, confidence)
