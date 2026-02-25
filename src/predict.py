@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import joblib
-from tensorflow.keras.models import load_model
+
 
 def preprocess_image(image_path):
     img = cv2.imread(image_path)
@@ -38,13 +38,4 @@ def predict_ml(image_path, model_path='models/rf_model.joblib'):
         # Temporary simulated output until real model is trained
         return np.random.uniform(10, 15)
 
-def predict_cnn(image_path, model_path='models/cnn_hb.h5'):
-    try:
-        model = load_model(model_path)
-        img = preprocess_image(image_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype('float32')/255.0
-        pred = model.predict(np.expand_dims(img, 0))[0,0]
-        return float(pred)
-    except Exception:
-        # Temporary simulated output until CNN is trained
-        return np.random.uniform(10, 15)
+
