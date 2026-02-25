@@ -3,11 +3,8 @@ numpy
 pandas
 opencv-python-headless
 scikit-learn
-joblib
-Pillow
 matplotlib
+joblib
 tqdm
 scikit-image
-protobuf==3.20.3e
-
-
+protobuf==3.20.3
